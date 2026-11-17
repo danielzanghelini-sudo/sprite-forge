@@ -10,6 +10,15 @@ export interface SpriteVersion {
   source: VersionSource;
 }
 
+export interface SpriteAnimation {
+  id: string;
+  name: string;
+  fps: number;
+  loop: boolean;
+  /** Quadros serializados por encodeImage, todos do tamanho do sprite. */
+  frames: string[];
+}
+
 export interface SpriteRecord {
   id: string;
   projectId: string;
@@ -17,6 +26,7 @@ export interface SpriteRecord {
   createdAt: number;
   updatedAt: number;
   versions: SpriteVersion[]; // a última é a atual
+  animations?: SpriteAnimation[];
 }
 
 export interface Project {
@@ -84,7 +94,10 @@ export function parseBackup(text: string): ProjectBackup {
     throw new Error('Este arquivo não é um backup de projeto do Sprite Forge.');
   const ok = (s: SpriteRecord) =>
     typeof s.name === 'string' && Array.isArray(s.versions) && s.versions.length > 0 &&
-    s.versions.every((v) => typeof v.image === 'string' && /^\d+x\d+:/.test(v.image));
+    s.versions.every((v) => typeof v.image === 'string' && /^\d+x\d+:/.test(v.image)) &&
+    (s.animations === undefined ||
+      (Array.isArray(s.animations) &&
+        s.animations.every((a) => typeof a.name === 'string' && Array.isArray(a.frames) && a.frames.every((f) => /^\d+x\d+:/.test(f)))));
   if (!b.sprites.every(ok)) throw new Error('O backup tem sprites corrompidos.');
   const projectId = newId();
   const now = Date.now();

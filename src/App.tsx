@@ -4,6 +4,7 @@ import { GeneratePanel } from './components/GeneratePanel';
 import { PalettePanel } from './components/PalettePanel';
 import { PixelCanvas } from './components/PixelCanvas';
 import { PixelEditor } from './components/PixelEditor';
+import { AnimatePanel } from './components/AnimatePanel';
 import { ProjectBar, ProjectPanel } from './components/ProjectPanel';
 import { decodeImage, encodeImage } from './core/editor';
 import {
@@ -23,7 +24,7 @@ import { makeSampleImage } from './lib/sample';
 
 type Opts = Omit<ConvertOptions, 'palette'>;
 let initPromise: Promise<Project[]> | null = null;
-type Tab = 'generate' | 'convert' | 'editor' | 'project';
+type Tab = 'generate' | 'convert' | 'editor' | 'animate' | 'project';
 
 /** A que sprite do projeto pertence o que está no editor (null = ainda não salvo). */
 interface EditMeta {
@@ -187,6 +188,27 @@ export default function App() {
   };
 
   useEffect(() => save('editMeta', editMeta), [editMeta]);
+
+  // sprite do projeto que está no editor (base das animações)
+  const [animSprite, setAnimSprite] = useState<SpriteRecord | null>(null);
+  useEffect(() => {
+    if (tab !== 'animate') return;
+    let alive = true;
+    (editMeta.spriteId ? store.getSprite(editMeta.spriteId) : Promise.resolve(null)).then((s) => {
+      if (alive) setAnimSprite(s && s.projectId === activeId ? s : null);
+    });
+    return () => { alive = false; };
+  }, [tab, editMeta.spriteId, activeId]);
+
+  const saveAnimations = async (animations: SpriteRecord['animations']) => {
+    if (!animSprite) return;
+    const fresh = (await store.getSprite(animSprite.id)) ?? animSprite;
+    const rec = { ...fresh, animations, updatedAt: Date.now() };
+    await store.saveSprite(rec);
+    setAnimSprite(rec);
+    setSaveMsg(`${animations?.length ?? 0} animações salvas em “${rec.name}”.`);
+    refreshSprites();
+  };
   useEffect(() => { if (activeId) save('activeProject', activeId); }, [activeId]);
   useEffect(() => {
     if (!saveMsg) return;
@@ -240,6 +262,7 @@ export default function App() {
           <button className={tab === 'generate' ? 'on' : ''} onClick={() => setTab('generate')}>Gerar</button>
           <button className={tab === 'convert' ? 'on' : ''} onClick={() => setTab('convert')}>Converter</button>
           <button className={tab === 'editor' ? 'on' : ''} onClick={() => setTab('editor')}>Editor</button>
+          <button className={tab === 'animate' ? 'on' : ''} onClick={() => setTab('animate')}>Animar</button>
           <button className={tab === 'project' ? 'on' : ''} onClick={() => setTab('project')}>Projeto</button>
         </nav>
         <span className="stage">{active ? active.name : 'Carregando…'}</span>
@@ -290,6 +313,8 @@ export default function App() {
           onUseInConverter={(raw, name) => { setSource(raw); setSourceName(name); setTab('convert'); }}
           onOpenInEditor={(img, name) => loadIntoEditor(img, { spriteId: null, name, source: 'gerado' })}
         />
+      ) : tab === 'animate' ? (
+        <AnimatePanel sprite={animSprite} palette={palette.colors} onSave={saveAnimations} onGoToEditor={() => setTab('editor')} />
       ) : tab === 'project' ? (
         active ? (
           <ProjectPanel

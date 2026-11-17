@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { getPixel, setPixel } from './editor';
-import { packSheet, scaleNearest, slug, uniqueNames } from './sheet';
+import { packRows, packSheet, scaleNearest, slug, uniqueNames } from './sheet';
 import { createImage } from './types';
 
 const RED = [255, 0, 0, 255] as [number, number, number, number];
@@ -43,6 +43,17 @@ describe('sprite sheet e atlas', () => {
   it('nomes únicos e seguros', () => {
     expect(uniqueNames(['heroi', 'heroi', ''])).toEqual(['heroi', 'heroi_2', 'sprite']);
     expect(slug('Cogumelo Aventureiro #1')).toBe('cogumelo_aventureiro_1');
+  });
+
+  it('uma linha por animação, com linhas de tamanhos diferentes', () => {
+    const f = (name: string) => ({ name, image: frame(8, 8) });
+    const { sheet, atlas } = packRows([[f('idle_0'), f('idle_1')], [f('walk_0'), f('walk_1'), f('walk_2')]], {
+      padding: 0, scale: 1, imageName: 'x.png',
+    });
+    expect(sheet.width).toBe(24);
+    expect(sheet.height).toBe(16);
+    expect(atlas.frames.walk_2.frame).toEqual({ x: 16, y: 8, w: 8, h: 8 });
+    expect(atlas.frames.idle_1.frame).toEqual({ x: 8, y: 0, w: 8, h: 8 });
   });
 
   it('recusa lista vazia', () => {

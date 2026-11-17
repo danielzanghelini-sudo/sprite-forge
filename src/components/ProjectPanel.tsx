@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import { decodeImage } from '../core/editor';
 import { addVersion, currentVersion, type Project, type ProjectBackup, type SpriteRecord, type SpriteVersion } from '../core/project';
-import { packSheet, slug } from '../core/sheet';
+import { packRows, packSheet, slug, type SheetFrame } from '../core/sheet';
 import { createImage, type PixelImage } from '../core/types';
 import { downloadJson, downloadPng } from '../lib/imageIO';
 import { deleteSprite, saveSprite } from '../lib/store';
@@ -37,14 +37,28 @@ export function ProjectPanel({ project, sprites, persistent, onChanged, onOpenIn
   const [columns, setColumns] = useState(4);
   const [padding, setPadding] = useState(1);
   const [scale, setScale] = useState(1);
+  const [withAnims, setWithAnims] = useState(true);
 
   const chosen = sprites.filter((s) => selected.has(s.id));
   const exportList = chosen.length ? chosen : sprites;
   const sheetName = `${slug(project.name)}_sheet`;
+  const animCount = exportList.reduce((n, s) => n + (s.animations?.length ?? 0), 0);
+  const useRows = withAnims && animCount > 0;
 
   const packed = useMemo(() => {
     if (!exportList.length) return null;
     try {
+      if (useRows) {
+        // por sprite: uma linha com o quadro-base e uma linha por animação (nome_animacao_N)
+        const rows: SheetFrame[][] = [];
+        for (const s of exportList) {
+          const n = slug(s.name);
+          rows.push([{ name: n, image: img(currentVersion(s).image) }]);
+          for (const a of s.animations ?? [])
+            rows.push(a.frames.map((f, i) => ({ name: `${n}_${slug(a.name)}_${i}`, image: img(f) })));
+        }
+        return packRows(rows, { padding, scale, imageName: `${sheetName}.png` });
+      }
       return packSheet(
         exportList.map((s) => ({ name: slug(s.name), image: img(currentVersion(s).image) })),
         { columns, padding, scale, imageName: `${sheetName}.png` },
@@ -52,7 +66,7 @@ export function ProjectPanel({ project, sprites, persistent, onChanged, onOpenIn
     } catch {
       return null;
     }
-  }, [exportList, columns, padding, scale, sheetName]);
+  }, [exportList, columns, padding, scale, sheetName, useRows]);
 
   const toggle = (id: string) =>
     setSelected((s) => {
@@ -114,7 +128,10 @@ export function ProjectPanel({ project, sprites, persistent, onChanged, onOpenIn
                       {s.name}
                     </button>
                   )}
-                  <span className="hint">{im.width}×{im.height} · {s.versions.length} {s.versions.length === 1 ? 'versão' : 'versões'}</span>
+                  <span className="hint">
+                    {im.width}×{im.height} · {s.versions.length} {s.versions.length === 1 ? 'versão' : 'versões'}
+                    {s.animations?.length ? ` · ${s.animations.length} anim.` : ''}
+                  </span>
                   <div className="row tight">
                     <button onClick={() => onOpenInEditor(s, cur)}>Editar</button>
                     <button onClick={() => setHistoryOf(historyOf === s.id ? null : s.id)}>Histórico</button>
@@ -165,11 +182,19 @@ export function ProjectPanel({ project, sprites, persistent, onChanged, onOpenIn
             {chosen.length ? `${chosen.length} selecionados` : `Todos os ${sprites.length} sprites`}, na ordem da galeria.
             Formato do atlas: JSON Hash (TexturePacker), lido direto pelo Phaser com <code>load.atlas</code>.
           </p>
-          <div className="row">
-            <label className="field">
-              <span>Colunas</span>
-              <input id="sheet-cols" type="number" min={0} max={64} value={columns} onChange={(e) => setColumns(Math.max(0, Math.min(64, +e.target.value || 0)))} />
+          {animCount > 0 && (
+            <label className="check">
+              <input type="checkbox" checked={withAnims} onChange={(e) => setWithAnims(e.target.checked)} />
+              Incluir animações ({animCount}): uma linha por animação, quadros nomeados sprite_animação_N
             </label>
+          )}
+          <div className="row">
+            {!useRows && (
+              <label className="field">
+                <span>Colunas</span>
+                <input id="sheet-cols" type="number" min={0} max={64} value={columns} onChange={(e) => setColumns(Math.max(0, Math.min(64, +e.target.value || 0)))} />
+              </label>
+            )}
             <label className="field">
               <span>Espaço (px)</span>
               <input id="sheet-pad" type="number" min={0} max={8} value={padding} onChange={(e) => setPadding(Math.max(0, Math.min(8, +e.target.value || 0)))} />
@@ -181,7 +206,7 @@ export function ProjectPanel({ project, sprites, persistent, onChanged, onOpenIn
               </select>
             </label>
           </div>
-          <p className="hint">0 colunas = tudo em uma linha.</p>
+          {!useRows && <p className="hint">0 colunas = tudo em uma linha.</p>}
           {packed && (
             <>
               <div className="sheet-preview">

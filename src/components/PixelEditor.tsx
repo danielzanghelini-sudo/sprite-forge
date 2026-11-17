@@ -22,6 +22,8 @@ interface Props {
   palette: string[];
   /** Muda quando uma imagem nova é carregada de fora: zera o histórico e a seleção. */
   docKey: number;
+  /** Quadro de referência mostrado em transparência por baixo (onion skin). */
+  onion?: PixelImage | null;
 }
 
 type Drag =
@@ -29,7 +31,7 @@ type Drag =
   | { kind: 'select'; ax: number; ay: number }
   | { kind: 'move'; sx: number; sy: number; base: PixelImage; piece: PixelImage; from: Rect };
 
-export function PixelEditor({ image, setImage, palette, docKey }: Props) {
+export function PixelEditor({ image, setImage, palette, docKey, onion }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const history = useRef(new History());
   const drag = useRef<Drag | null>(null);
@@ -200,6 +202,16 @@ export function PixelEditor({ image, setImage, palette, docKey }: Props) {
         ctx.fillStyle = ((x / cell + y / cell) & 1) === 0 ? '#2a2a33' : '#33333d';
         ctx.fillRect(x, y, cell, cell);
       }
+    if (onion && onion.width === image.width && onion.height === image.height) {
+      const od = onion.data;
+      for (let y = 0; y < onion.height; y++)
+        for (let x = 0; x < onion.width; x++) {
+          const o = (y * onion.width + x) * 4;
+          if (od[o + 3] === 0) continue;
+          ctx.fillStyle = `rgba(${od[o]},${od[o + 1]},${od[o + 2]},0.3)`;
+          ctx.fillRect(x * zoom, y * zoom, zoom, zoom);
+        }
+    }
     const d = image.data;
     for (let y = 0; y < image.height; y++)
       for (let x = 0; x < image.width; x++) {
@@ -235,7 +247,7 @@ export function PixelEditor({ image, setImage, palette, docKey }: Props) {
       ctx.lineDashOffset = 0;
     }
     ctx.setLineDash([]);
-  }, [image, zoom, showGrid, selection, hover, mirror, tool]);
+  }, [image, zoom, showGrid, selection, hover, mirror, tool, onion]);
 
   const colorHex = color[3] === 0 ? null : rgbToHex([color[0], color[1], color[2]]);
 

@@ -67,15 +67,29 @@ export function uniqueNames(names: string[]): string[] {
  */
 export function packSheet(frames: SheetFrame[], opts: SheetOptions): { sheet: PixelImage; atlas: AtlasJson } {
   if (frames.length === 0) throw new Error('Nenhum sprite selecionado.');
+  const cols = opts.columns > 0 ? Math.min(opts.columns, frames.length) : frames.length;
+  const rows: SheetFrame[][] = [];
+  for (let i = 0; i < frames.length; i += cols) rows.push(frames.slice(i, i + cols));
+  return packRows(rows, opts);
+}
+
+/** Uma linha por grupo (ex.: uma animação por linha); a largura segue a linha mais longa. */
+export function packRows(rowsIn: SheetFrame[][], opts: Omit<SheetOptions, 'columns'>): { sheet: PixelImage; atlas: AtlasJson } {
+  const rowsList = rowsIn.filter((r) => r.length > 0);
+  const frames = rowsList.flat();
+  if (frames.length === 0) throw new Error('Nenhum sprite selecionado.');
   const k = Math.max(1, Math.floor(opts.scale));
   const pad = Math.max(0, Math.floor(opts.padding)) * k;
   const scaled = frames.map((f) => scaleNearest(f.image, k));
   const cellW = Math.max(...scaled.map((s) => s.width));
   const cellH = Math.max(...scaled.map((s) => s.height));
-  const cols = opts.columns > 0 ? Math.min(opts.columns, frames.length) : frames.length;
-  const rows = Math.ceil(frames.length / cols);
+  const cols = Math.max(...rowsList.map((r) => r.length));
+  const rows = rowsList.length;
   const sheet = createImage(cols * cellW + (cols - 1) * pad, rows * cellH + (rows - 1) * pad);
   const names = uniqueNames(frames.map((f) => f.name));
+  // posição (linha, coluna) de cada quadro na ordem achatada
+  const pos: [number, number][] = [];
+  rowsList.forEach((r, ri) => r.forEach((_, ci) => pos.push([ri, ci])));
   const atlas: AtlasJson = {
     frames: {},
     meta: {
@@ -89,8 +103,8 @@ export function packSheet(frames: SheetFrame[], opts: SheetOptions): { sheet: Pi
   };
 
   scaled.forEach((img, i) => {
-    const x0 = (i % cols) * (cellW + pad);
-    const y0 = Math.floor(i / cols) * (cellH + pad);
+    const x0 = pos[i][1] * (cellW + pad);
+    const y0 = pos[i][0] * (cellH + pad);
     for (let y = 0; y < img.height; y++) {
       const s = y * img.width * 4;
       sheet.data.set(img.data.subarray(s, s + img.width * 4), ((y0 + y) * sheet.width + x0) * 4);
