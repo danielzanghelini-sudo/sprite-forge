@@ -33,6 +33,23 @@ export function pixelImageToCanvas(img: PixelImage, scale = 1): HTMLCanvasElemen
   return big;
 }
 
+/**
+ * Prepara o sprite como referência para a IA: ampliado sem suavização para ~512 px,
+ * centralizado em fundo branco (o mesmo fundo que pedimos no prompt).
+ */
+export function spriteToReferenceBlob(img: PixelImage, size = 512): Promise<Blob> {
+  const k = Math.max(1, Math.floor((size * 0.8) / Math.max(img.width, img.height)));
+  const sprite = pixelImageToCanvas(img, k);
+  const c = document.createElement('canvas');
+  c.width = c.height = size;
+  const g = c.getContext('2d')!;
+  g.fillStyle = '#ffffff';
+  g.fillRect(0, 0, size, size);
+  g.imageSmoothingEnabled = false;
+  g.drawImage(sprite, Math.floor((size - sprite.width) / 2), Math.floor((size - sprite.height) / 2));
+  return new Promise((resolve, reject) => c.toBlob((b) => (b ? resolve(b) : reject(new Error('Falha ao gerar PNG'))), 'image/png'));
+}
+
 export function downloadBlob(blob: Blob, filename: string) {
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);

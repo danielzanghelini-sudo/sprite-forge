@@ -312,6 +312,7 @@ export default function App() {
           palette={palette.colors}
           onUseInConverter={(raw, name) => { setSource(raw); setSourceName(name); setTab('convert'); }}
           onOpenInEditor={(img, name) => loadIntoEditor(img, { spriteId: null, name, source: 'gerado' })}
+          base={{ image: editImage, name: editMeta.name }}
         />
       ) : tab === 'animate' ? (
         <AnimatePanel sprite={animSprite} palette={palette.colors} onSave={saveAnimations} onGoToEditor={() => setTab('editor')} />

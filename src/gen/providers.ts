@@ -74,6 +74,62 @@ export const pollinations: ImageProvider = {
   },
 };
 
+/* ---------- Geração com imagem de referência (Etapa 2b) ---------- */
+
+/** Modelos do Pollinations que aceitam referência e não são exclusivos de saldo pago (lista de /image/models). */
+export const REFERENCE_MODELS = [
+  { id: 'black-forest-labs/flux.1-kontext-pro', label: 'FLUX.1 Kontext Pro', note: 'feito para editar mantendo o personagem' },
+  { id: 'black-forest-labs/flux.2-klein-4b', label: 'FLUX.2 klein 4B', note: 'o mais barato' },
+  { id: 'microsoft/mai-image-2.6-flash', label: 'MAI Image 2.6 Flash', note: 'rápido' },
+  { id: 'microsoft/mai-image-2.6', label: 'MAI Image 2.6', note: 'qualidade maior' },
+];
+
+function checkKey(key?: string): string {
+  const k = key?.trim();
+  if (!k) throw new Error('Informe sua chave sk_ do Pollinations.');
+  if (k.startsWith('pk_')) throw new Error('Chaves pk_ não autenticam. Use uma chave secreta sk_.');
+  return k;
+}
+
+/**
+ * Envia a imagem para media.pollinations.ai e devolve a URL pública.
+ * Atenção: a imagem enviada fica acessível por quem tiver a URL.
+ */
+export async function uploadReference(blob: Blob, apiKey: string, signal?: AbortSignal): Promise<string> {
+  const key = checkKey(apiKey);
+  const fd = new FormData();
+  fd.append('file', blob, 'referencia.png');
+  const res = await fetch('https://media.pollinations.ai/upload', { method: 'POST', body: fd, signal, headers: { Authorization: `Bearer ${key}` } });
+  if (res.status === 401) throw new Error('Chave recusada no envio da referência (401).');
+  if (res.status === 402) throw new Error('Saldo da chave esgotado (402).');
+  if (!res.ok) throw new Error(`Envio da referência falhou (${res.status}).`);
+  const data = (await res.json()) as { url?: string };
+  if (!data.url) throw new Error('O envio não devolveu a URL da imagem.');
+  return data.url;
+}
+
+export function generateWithReference(
+  req: GenerateRequest & { imageUrl: string; model: string },
+  apiKey: string,
+): Promise<Blob> {
+  const key = checkKey(apiKey);
+  const url =
+    `https://gen.pollinations.ai/image/${encodeURIComponent(req.prompt)}` +
+    `?model=${encodeURIComponent(req.model)}&width=${req.width}&height=${req.height}&seed=${req.seed}` +
+    `&image=${encodeURIComponent(req.imageUrl)}`;
+  return fetchImage(url, req.signal, 2, { Authorization: `Bearer ${key}` });
+}
+
+/** Preço de tabela por imagem (em pollen) dos modelos, lido ao vivo de /image/models. */
+export async function fetchModelPrices(): Promise<Record<string, number>> {
+  const res = await fetch('https://gen.pollinations.ai/image/models');
+  if (!res.ok) return {};
+  const list = (await res.json()) as { name: string; pricing?: { completionImageTokens?: string } }[];
+  const out: Record<string, number> = {};
+  for (const m of list) if (m.pricing?.completionImageTokens) out[m.name] = Number(m.pricing.completionImageTokens);
+  return out;
+}
+
 export const customUrl: ImageProvider = {
   id: 'custom',
   name: 'URL personalizada',

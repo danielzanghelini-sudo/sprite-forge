@@ -6,6 +6,7 @@ import { buildPrompt, KIND_LABEL, styleWarning, VIEW_LABEL, type AssetKind, type
 import { findProvider, PROVIDERS } from '../gen/providers';
 import { fileToPixelImage } from '../lib/imageIO';
 import { PixelCanvas } from './PixelCanvas';
+import { ReferenceTest } from './ReferenceTest';
 
 type Opts = Omit<ConvertOptions, 'palette'>;
 
@@ -30,6 +31,8 @@ interface Props {
   palette: string[];
   onUseInConverter: (raw: PixelImage, name: string) => void;
   onOpenInEditor: (sprite: PixelImage, name: string) => void;
+  /** Sprite que está no editor: base do teste de referência. */
+  base: { image: PixelImage; name: string };
 }
 
 const KEY = 'sprite-app:1c';
@@ -51,7 +54,7 @@ const write = (k: string, v: unknown) => {
 
 const SOURCE_SIZE = 512;
 
-export function GeneratePanel({ options, palette, onUseInConverter, onOpenInEditor }: Props) {
+export function GeneratePanel({ options, palette, onUseInConverter, onOpenInEditor, base }: Props) {
   const [subject, setSubject] = useState(() => read('subject', ''));
   const [kind, setKind] = useState<AssetKind>(() => read('kind', 'character'));
   const [view, setView] = useState<View>(() => read('view', 'side'));
@@ -233,6 +236,10 @@ export function GeneratePanel({ options, palette, onUseInConverter, onOpenInEdit
           Uso: {log.count} imagens · tempo médio {log.count ? (log.totalMs / log.count / 1000).toFixed(1) : '–'} s (meta ≤ 15 s) · custo acumulado US$ {log.totalCost.toFixed(2)}
         </p>
       </section>
+
+      {provider.id === 'pollinations' && (
+        <ReferenceTest base={base} apiKey={apiKeys.pollinations ?? ''} palette={palette} options={options} onOpenInEditor={onOpenInEditor} />
+      )}
 
       {candidates.length > 0 && (
         <section className="candidates">

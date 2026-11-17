@@ -183,3 +183,12 @@ code { font-family: ui-monospace, Consolas, monospace; font-size: 0.95em; }
 .frames { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 4px; }
 .frame { display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 4px; line-height: 1; flex: none; }
 .frame.sel { border-color: var(--accent); background: #2a2a36; }
+
+/* ---- Etapa 2b: teste de referência ---- */
+.ref-grid { display: grid; gap: 10px; align-items: start; overflow-x: auto; }
+.ref-pose { align-self: center; font-weight: 600; }
+.ref-cell { display: flex; flex-direction: column; gap: 4px; padding: 6px; border: 1px solid var(--line); border-radius: 6px; min-width: 0; }
+.raw-sm { width: 96px; height: 96px; object-fit: contain; border-radius: 4px; background: #0e0e12; }
+.placeholder.small { height: 120px; font-size: 12px; }
+.ref-cell button.on { background: var(--accent); color: #1a1300; border-color: var(--accent); }
+.report-text { white-space: pre-wrap; background: #0e0e12; padding: 8px; border-radius: 6px; margin: 0; }
