@@ -29,7 +29,7 @@ interface Props {
   options: Opts;
   palette: string[];
   onUseInConverter: (raw: PixelImage, name: string) => void;
-  onOpenInEditor: (sprite: PixelImage) => void;
+  onOpenInEditor: (sprite: PixelImage, name: string) => void;
 }
 
 const KEY = 'sprite-app:1c';
@@ -243,7 +243,7 @@ export function GeneratePanel({ options, palette, onUseInConverter, onOpenInEdit
               options={options}
               palette={palette}
               onUse={() => c.raw && onUseInConverter(c.raw, `${name}-${c.seed}`)}
-              onEdit={(s) => onOpenInEditor(s)}
+              onEdit={(s) => onOpenInEditor(s, subject.trim().slice(0, 40) || 'Sprite gerado')}
             />
           ))}
         </section>

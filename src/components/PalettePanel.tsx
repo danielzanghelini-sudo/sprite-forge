@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { EXTRACT_ID, PRESET_PALETTES, SNES_EXTRACT_ID } from '../core/palettes';
 import { extractPalette } from '../core/quantize';
 import type { Palette, PixelImage } from '../core/types';
@@ -15,6 +15,9 @@ export function PalettePanel({ palette, locked, source, onChange, onToggleLock }
   const [kind, setKind] = useState(palette.id);
   const [count, setCount] = useState(16);
   const isExtract = kind === EXTRACT_ID || kind === SNES_EXTRACT_ID;
+
+  // a paleta pode mudar de fora (troca de projeto): o seletor acompanha
+  useEffect(() => setKind(palette.id), [palette.id]);
 
   const pick = (id: string) => {
     setKind(id);

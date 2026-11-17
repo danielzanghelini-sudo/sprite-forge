@@ -33,6 +33,18 @@ export function pixelImageToCanvas(img: PixelImage, scale = 1): HTMLCanvasElemen
   return big;
 }
 
+export function downloadBlob(blob: Blob, filename: string) {
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = filename;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+}
+
+export function downloadJson(data: unknown, filename: string) {
+  downloadBlob(new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' }), filename);
+}
+
 export function downloadPng(img: PixelImage, filename: string, scale = 1) {
   pixelImageToCanvas(img, scale).toBlob((blob) => {
     if (!blob) return;

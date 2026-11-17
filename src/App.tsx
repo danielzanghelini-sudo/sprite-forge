@@ -4,7 +4,15 @@ import { GeneratePanel } from './components/GeneratePanel';
 import { PalettePanel } from './components/PalettePanel';
 import { PixelCanvas } from './components/PixelCanvas';
 import { PixelEditor } from './components/PixelEditor';
+import { ProjectBar, ProjectPanel } from './components/ProjectPanel';
 import { decodeImage, encodeImage } from './core/editor';
+import {
+  addVersion, createSprite, newId, parseBackup,
+  type Project, type ProjectBackup, type SpriteRecord, type VersionSource,
+} from './core/project';
+import { slug } from './core/sheet';
+import * as store from './lib/store';
+import { downloadJson } from './lib/imageIO';
 import { verifySprite, type SpriteReport } from './core/gridCheck';
 import { PRESET_PALETTES } from './core/palettes';
 import { convertToSprite, DEFAULT_CONVERT, type ConvertOptions } from './core/pixelate';
@@ -14,7 +22,15 @@ import { downloadPng, fileToPixelImage } from './lib/imageIO';
 import { makeSampleImage } from './lib/sample';
 
 type Opts = Omit<ConvertOptions, 'palette'>;
-type Tab = 'generate' | 'convert' | 'editor';
+let initPromise: Promise<Project[]> | null = null;
+type Tab = 'generate' | 'convert' | 'editor' | 'project';
+
+/** A que sprite do projeto pertence o que está no editor (null = ainda não salvo). */
+interface EditMeta {
+  spriteId: string | null;
+  name: string;
+  source: VersionSource;
+}
 const STORE = 'sprite-app:1a';
 
 function load<T>(key: string, fallback: T): T {
@@ -49,6 +65,134 @@ export default function App() {
     return (saved && decodeImage(saved)) || createImage(32, 32);
   });
   const [docKey, setDocKey] = useState(0);
+  const [editMeta, setEditMeta] = useState<EditMeta>(() => load('editMeta', { spriteId: null, name: 'Sprite', source: 'editado' }));
+  const [saveMsg, setSaveMsg] = useState<string | null>(null);
+
+  // ---- projetos ----
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [activeId, setActiveId] = useState<string | null>(() => load('activeProject', null));
+  const [sprites, setSprites] = useState<SpriteRecord[]>([]);
+  const active = projects.find((p) => p.id === activeId) ?? null;
+
+  const refreshSprites = async (id = activeId) => {
+    if (id) setSprites(await store.listSprites(id));
+  };
+
+  // carrega projetos; cria o primeiro com a paleta e a grade atuais
+  useEffect(() => {
+    (async () => {
+      // uma única inicialização por página (o modo estrito do React roda efeitos duas vezes)
+      initPromise ??= (async () => {
+        const found = await store.listProjects();
+        if (found.length) return found;
+        const now = Date.now();
+        const first: Project = {
+          id: newId(), name: 'Meu projeto', palette, locked,
+          gridW: options.gridW, gridH: options.gridH, createdAt: now, updatedAt: now,
+        };
+        await store.saveProject(first);
+        return [first];
+      })();
+      const list = await initPromise;
+      setProjects(list);
+      const id = list.some((p) => p.id === activeId) ? activeId! : list[0].id;
+      setActiveId(id);
+      refreshSprites(id);
+    })();
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // paleta, trava e grade atuais ficam gravadas no projeto ativo
+  useEffect(() => {
+    if (!active) return;
+    if (active.palette === palette && active.locked === locked && active.gridW === options.gridW && active.gridH === options.gridH) return;
+    const updated = { ...active, palette, locked, gridW: options.gridW, gridH: options.gridH, updatedAt: Date.now() };
+    setProjects((ps) => ps.map((p) => (p.id === updated.id ? updated : p)));
+    const t = setTimeout(() => store.saveProject(updated), 300);
+    return () => clearTimeout(t);
+  }, [palette, locked, options.gridW, options.gridH, active]);
+
+  const selectProject = (id: string, list = projects) => {
+    const p = list.find((x) => x.id === id);
+    if (!p) return;
+    setActiveId(id);
+    setPalette(p.palette);
+    setLocked(p.locked);
+    setOptions((o) => ({ ...o, gridW: p.gridW, gridH: p.gridH }));
+    refreshSprites(id);
+  };
+
+  const createProject = async (name: string) => {
+    const now = Date.now();
+    const p: Project = { id: newId(), name, palette, locked: false, gridW: options.gridW, gridH: options.gridH, createdAt: now, updatedAt: now };
+    await store.saveProject(p);
+    const list = [p, ...projects];
+    setProjects(list);
+    selectProject(p.id, list);
+  };
+
+  const renameProject = async (name: string) => {
+    if (!active) return;
+    const p = { ...active, name, updatedAt: Date.now() };
+    await store.saveProject(p);
+    setProjects((ps) => ps.map((x) => (x.id === p.id ? p : x)));
+  };
+
+  const removeProject = async () => {
+    if (!active || projects.length < 2) return;
+    await store.deleteProject(active.id);
+    const list = projects.filter((p) => p.id !== active.id);
+    setProjects(list);
+    selectProject(list[0].id, list);
+  };
+
+  const exportProject = async () => {
+    if (!active) return;
+    const backup: ProjectBackup = {
+      format: 'sprite-forge-project', version: 1, exportedAt: new Date().toISOString(),
+      project: active, sprites: await store.listSprites(active.id),
+    };
+    downloadJson(backup, `${slug(active.name)}_backup.json`);
+  };
+
+  const importProject = async (file: File) => {
+    try {
+      const b = parseBackup(await file.text());
+      await store.saveProject(b.project);
+      for (const s of b.sprites) await store.saveSprite(s);
+      const list = [b.project, ...projects];
+      setProjects(list);
+      selectProject(b.project.id, list);
+      setTab('project');
+      setSaveMsg(`Projeto importado com ${b.sprites.length} sprites.`);
+    } catch (e) {
+      setSaveMsg(e instanceof Error ? e.message : 'Falha ao importar.');
+    }
+  };
+
+  const saveToProject = async () => {
+    if (!active) return;
+    const encoded = encodeImage(editImage);
+    const existing = editMeta.spriteId ? await store.getSprite(editMeta.spriteId) : null;
+    let rec: SpriteRecord;
+    if (existing && existing.projectId === active.id) {
+      rec = addVersion({ ...existing, name: editMeta.name.trim() || existing.name }, encoded, 'editado');
+      setSaveMsg(rec === existing ? 'Nada mudou desde a última versão.' : `Versão ${rec.versions.length} salva.`);
+    } else {
+      rec = createSprite(active.id, editMeta.name, encoded, editMeta.source);
+      setSaveMsg(`Salvo em “${active.name}”.`);
+    }
+    await store.saveSprite(rec);
+    setEditMeta({ spriteId: rec.id, name: rec.name, source: 'editado' });
+    refreshSprites();
+  };
+
+  useEffect(() => save('editMeta', editMeta), [editMeta]);
+  useEffect(() => { if (activeId) save('activeProject', activeId); }, [activeId]);
+  useEffect(() => {
+    if (!saveMsg) return;
+    const t = setTimeout(() => setSaveMsg(null), 4000);
+    return () => clearTimeout(t);
+  }, [saveMsg]);
 
   useEffect(() => save('tab', tab), [tab]);
   useEffect(() => save('palette', palette), [palette]);
@@ -81,8 +225,9 @@ export default function App() {
     }
   };
 
-  const loadIntoEditor = (img: PixelImage) => {
+  const loadIntoEditor = (img: PixelImage, meta: EditMeta = { spriteId: null, name: 'Sprite', source: 'editado' }) => {
     setEditImage(img);
+    setEditMeta(meta);
     setDocKey((k) => k + 1);
     setTab('editor');
   };
@@ -95,11 +240,26 @@ export default function App() {
           <button className={tab === 'generate' ? 'on' : ''} onClick={() => setTab('generate')}>Gerar</button>
           <button className={tab === 'convert' ? 'on' : ''} onClick={() => setTab('convert')}>Converter</button>
           <button className={tab === 'editor' ? 'on' : ''} onClick={() => setTab('editor')}>Editor</button>
+          <button className={tab === 'project' ? 'on' : ''} onClick={() => setTab('project')}>Projeto</button>
         </nav>
-        <span className="stage">Etapa 1c · geração por texto</span>
+        <span className="stage">{active ? active.name : 'Carregando…'}</span>
       </header>
 
+      {saveMsg && <div className="toast" role="status">{saveMsg}</div>}
+
       <aside className="sidebar">
+        {active && (
+          <ProjectBar
+            projects={projects}
+            active={active}
+            onSelect={(id) => selectProject(id)}
+            onCreate={createProject}
+            onRename={renameProject}
+            onDelete={removeProject}
+            onExport={exportProject}
+            onImport={importProject}
+          />
+        )}
         <PalettePanel
           palette={palette}
           locked={locked}
@@ -107,7 +267,7 @@ export default function App() {
           onChange={setPalette}
           onToggleLock={() => setLocked((l) => !l)}
         />
-        {tab !== 'editor' && <ConvertPanel options={options} onChange={setOptions} />}
+        {(tab === 'generate' || tab === 'convert') && <ConvertPanel options={options} onChange={setOptions} />}
         {tab === 'editor' && (
           <section className="panel">
             <h2>Novo sprite em branco</h2>
@@ -128,8 +288,23 @@ export default function App() {
           options={options}
           palette={palette.colors}
           onUseInConverter={(raw, name) => { setSource(raw); setSourceName(name); setTab('convert'); }}
-          onOpenInEditor={loadIntoEditor}
+          onOpenInEditor={(img, name) => loadIntoEditor(img, { spriteId: null, name, source: 'gerado' })}
         />
+      ) : tab === 'project' ? (
+        active ? (
+          <ProjectPanel
+            project={active}
+            sprites={sprites}
+            persistent={store.persistent}
+            onChanged={() => refreshSprites()}
+            onOpenInEditor={(s, v) => {
+              const im = decodeImage(v.image);
+              if (im) loadIntoEditor(im, { spriteId: s.id, name: s.name, source: 'editado' });
+            }}
+          />
+        ) : (
+          <main className="project-area"><p className="hint">Carregando projetos…</p></main>
+        )
       ) : tab === 'convert' ? (
         <main className="stage-area">
           <section
@@ -174,7 +349,7 @@ export default function App() {
                 </div>
                 {report && <ReportBar report={report} />}
                 <div className="row">
-                  <button className="primary" onClick={() => loadIntoEditor(result)}>Abrir no editor</button>
+                  <button className="primary" onClick={() => loadIntoEditor(result, { spriteId: null, name: sourceName, source: 'convertido' })}>Abrir no editor</button>
                   <button onClick={() => downloadPng(result, `${sourceName}_${result.width}x${result.height}.png`)}>Baixar PNG 1×</button>
                   <button onClick={() => downloadPng(result, `${sourceName}_${result.width}x${result.height}@8x.png`, 8)}>Baixar PNG 8×</button>
                 </div>
@@ -191,10 +366,27 @@ export default function App() {
               <h2>Editor · {editImage.width}×{editImage.height}</h2>
               <div className="row">
                 <PixelCanvas image={editImage} displaySize={editImage.width} />
-                <button onClick={() => downloadPng(editImage, `sprite_${editImage.width}x${editImage.height}.png`)}>Baixar PNG 1×</button>
-                <button onClick={() => downloadPng(editImage, `sprite_${editImage.width}x${editImage.height}@8x.png`, 8)}>Baixar PNG 8×</button>
+                <button onClick={() => downloadPng(editImage, `${slug(editMeta.name)}.png`)}>Baixar PNG 1×</button>
+                <button onClick={() => downloadPng(editImage, `${slug(editMeta.name)}@8x.png`, 8)}>Baixar PNG 8×</button>
               </div>
             </header>
+            <form
+              className="row save-row"
+              onSubmit={(e) => { e.preventDefault(); saveToProject(); }}
+            >
+              <label className="field grow">
+                <span>Nome do sprite</span>
+                <input id="sprite-name" type="text" value={editMeta.name} onChange={(e) => setEditMeta((m) => ({ ...m, name: e.target.value }))} />
+              </label>
+              <button type="submit" className="primary" disabled={!active}>
+                {editMeta.spriteId ? 'Salvar nova versão' : 'Salvar no projeto'}
+              </button>
+              {editMeta.spriteId && (
+                <button type="button" onClick={() => setEditMeta((m) => ({ ...m, spriteId: null }))} title="Salvar como um sprite separado">
+                  Salvar como novo
+                </button>
+              )}
+            </form>
             <PixelEditor image={editImage} setImage={setEditImage} palette={palette.colors} docKey={docKey} />
             <ReportBar report={editReport}>
               {editReport.offPalette > 0 && (

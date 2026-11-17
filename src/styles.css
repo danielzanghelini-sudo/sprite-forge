@@ -142,3 +142,33 @@ details summary { cursor: pointer; }
   .editor-side .swatches { grid-template-columns: repeat(auto-fill, minmax(28px, 1fr)); }
   .previews { justify-content: center; }
 }
+
+/* ---- Etapa 1d: projetos, histórico e exportação ---- */
+.project-area { padding: 16px; display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+.project-area > * { min-width: 0; }
+.gallery { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; }
+.tile { position: relative; display: flex; flex-direction: column; gap: 6px; align-items: center; padding: 10px; border: 1px solid var(--line); border-radius: 8px; background: #191920; }
+.tile.sel { border-color: var(--accent); }
+.tile-check { position: absolute; top: 6px; left: 6px; }
+.tile-thumb { background: none; border: none; padding: 0; line-height: 0; cursor: pointer; }
+.tile-name { background: none; border: none; padding: 2px 4px; font-weight: 600; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tile .row input { width: 100%; min-width: 0; }
+.row.tight { gap: 4px; justify-content: center; }
+.row.tight button { padding: 5px 8px; font-size: 12px; }
+button.danger { background: var(--bad); border-color: var(--bad); color: #fff; }
+.compare { display: flex; gap: 16px; flex-wrap: wrap; }
+.compare figure { margin: 0; display: flex; flex-direction: column; gap: 4px; }
+.versions { display: flex; flex-direction: column; gap: 6px; max-height: 360px; overflow-y: auto; }
+.version { display: flex; align-items: center; gap: 10px; padding: 6px; border: 1px solid transparent; border-radius: 6px; flex-wrap: wrap; }
+.version.sel { border-color: var(--line); background: #191920; }
+.version-info { display: flex; flex-direction: column; flex: 1; min-width: 120px; font-size: 13px; }
+.version .row.tight button.on { background: var(--accent); color: #1a1300; border-color: var(--accent); }
+.sheet-preview { overflow: auto; max-width: 100%; border: 1px solid var(--line); border-radius: 6px; padding: 8px; background: #0e0e12; line-height: 0; }
+.save-row { align-items: flex-end; }
+.toast {
+  position: fixed; z-index: 20; left: 50%; transform: translateX(-50%);
+  bottom: calc(16px + env(safe-area-inset-bottom, 0px));
+  background: var(--panel); border: 1px solid var(--accent); color: var(--text);
+  padding: 10px 16px; border-radius: 8px; font-size: 14px; box-shadow: 0 6px 24px rgba(0, 0, 0, 0.4); max-width: calc(100% - 32px);
+}
+code { font-family: ui-monospace, Consolas, monospace; font-size: 0.95em; }
